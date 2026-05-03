@@ -2,6 +2,7 @@
 	"name": "levellog",
 	"private": true,
 	"version": "0.0.1",
+	"license": "MIT",
 	"packageManager": "bun@1.3.9",
 	"type": "module",
 	"scripts": {
