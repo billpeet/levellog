@@ -4,7 +4,7 @@ Scaffolded foundations for the LevelLog web application.
 
 ## Included
 
-- SvelteKit with the Node adapter
+- SvelteKit with the Bun adapter
 - Tailwind CSS v4 via `@tailwindcss/vite`
 - Drizzle ORM with SQLite
 - Better Auth with Google provider scaffolding

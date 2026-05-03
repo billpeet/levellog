@@ -18,4 +18,4 @@ COPY --from=build /app/bun.lock ./bun.lock
 COPY --from=build /app/node_modules ./node_modules
 RUN mkdir -p /app/data/uploads
 EXPOSE 3000
-CMD ["bun", "run", "build"]
+CMD ["bun", "./build/index.js"]
