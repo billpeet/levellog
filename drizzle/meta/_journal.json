@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1777768740254,
+      "tag": "0000_fat_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1777787124980,
+      "tag": "0001_clumsy_brood",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777787307418,
+      "tag": "0002_nosy_random",
+      "breakpoints": true
+    }
+  ]
+}

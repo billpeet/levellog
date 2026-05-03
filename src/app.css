@@ -1,12 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Geist:wght@300;400;500;600;700&display=swap');
+
 @import 'tailwindcss';
+
+@theme {
+	--color-ink: #0f100e;
+	--color-ink-2: #2b2a26;
+	--color-graphite: #6e6a5c;
+	--color-rule: #c8bfa6;
+	--color-rule-2: #d9d2bd;
+	--color-paper: #f1ecde;
+	--color-paper-2: #e7e0cb;
+	--color-vellum: #faf6eb;
+	--color-accent: #e5532d;
+	--color-accent-deep: #b6361a;
+	--color-signal: #2e7d5b;
+	--color-signal-deep: #1f5b41;
+	--color-warning: #c79400;
+
+	--font-display: 'Instrument Serif', 'Cormorant Garamond', 'Times New Roman', serif;
+	--font-body: 'Geist', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Menlo', ui-monospace, monospace;
+}
 
 :root {
 	color-scheme: light;
-	font-family:
-		'Segoe UI', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-	background:
-		radial-gradient(circle at top, #f8fafc 0%, #eff6ff 35%, #e2e8f0 100%);
-	color: #0f172a;
+	font-family: var(--font-body);
+	background-color: var(--color-paper);
+	color: var(--color-ink);
+	font-feature-settings: 'ss01', 'ss03';
+	-webkit-font-smoothing: antialiased;
 }
 
 html,
@@ -16,20 +38,139 @@ body {
 
 body {
 	margin: 0;
+	background-color: var(--color-paper);
+	background-image:
+		radial-gradient(rgba(15, 16, 14, 0.045) 1px, transparent 1.4px),
+		radial-gradient(circle at 12% 8%, rgba(229, 83, 45, 0.05), transparent 38%),
+		radial-gradient(circle at 88% 92%, rgba(46, 125, 91, 0.05), transparent 38%);
+	background-size:
+		18px 18px,
+		auto,
+		auto;
+	background-attachment: fixed;
 }
 
-* {
-	box-sizing: border-box;
+@layer base {
+	* {
+		box-sizing: border-box;
+	}
+
+	button,
+	input,
+	textarea,
+	select {
+		font: inherit;
+		color: inherit;
+	}
+
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	::selection {
+		background: var(--color-ink);
+		color: var(--color-paper);
+	}
 }
 
-button,
-input,
-textarea,
-select {
-	font: inherit;
+/* Numeric readouts always tabular */
+.tabular,
+.font-mono {
+	font-variant-numeric: tabular-nums;
 }
 
-a {
-	color: inherit;
-	text-decoration: none;
+/* Eyebrow / micro-caps */
+.eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: var(--color-graphite);
+}
+
+/* Hairline divider used everywhere */
+.hairline {
+	background-image: linear-gradient(to right, var(--color-rule) 50%, transparent 0);
+	background-size: 6px 1px;
+	background-repeat: repeat-x;
+	height: 1px;
+}
+
+.hairline-v {
+	background-image: linear-gradient(to bottom, var(--color-rule) 50%, transparent 0);
+	background-size: 1px 6px;
+	background-repeat: repeat-y;
+	width: 1px;
+}
+
+/* Ruler ticks for the topbar */
+.ruler-ticks {
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--color-ink) 0,
+		var(--color-ink) 1px,
+		transparent 1px,
+		transparent 12px
+	);
+	background-size: 60px 6px;
+	background-repeat: repeat-x;
+	background-position: bottom left;
+	opacity: 0.55;
+}
+
+/* Surveyor's grid for the canvas placeholder */
+.surveyor-grid {
+	background-color: var(--color-vellum);
+	background-image: url('/grid.svg');
+	background-size: 80px 80px;
+}
+
+/* Topographic decoration backplate */
+.topo-plate {
+	background-image: url('/topo.svg');
+	background-size: cover;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+/* Subtle press / tap response */
+.press {
+	transition:
+		transform 120ms ease,
+		background-color 120ms ease,
+		color 120ms ease,
+		border-color 120ms ease;
+}
+.press:active {
+	transform: translateY(1px);
+}
+
+/* Pulse for active session indicator */
+@keyframes laser-pulse {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(46, 125, 91, 0.55);
+	}
+	50% {
+		box-shadow: 0 0 0 5px rgba(46, 125, 91, 0);
+	}
+}
+.laser-dot {
+	animation: laser-pulse 1.8s ease-in-out infinite;
+}
+
+/* Reveal on mount */
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+.rise {
+	animation: rise 480ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }

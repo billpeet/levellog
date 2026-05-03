@@ -4,7 +4,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { db, schema } from '$lib/server/db/client';
 import { getServerEnv } from '$lib/server/env';
 
-let authInstance: ReturnType<typeof betterAuth> | null = null;
+let authInstance: ReturnType<typeof createAuth> | null = null;
 
 function createAuth() {
 	const env = getServerEnv();
@@ -27,7 +27,7 @@ function createAuth() {
 	});
 }
 
-export const auth = new Proxy({} as ReturnType<typeof betterAuth>, {
+export const auth = new Proxy({} as ReturnType<typeof createAuth>, {
 	get(_, prop, receiver) {
 		if (!authInstance) {
 			authInstance = createAuth();

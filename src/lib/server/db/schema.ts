@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { check, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const timestamps = {
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -84,7 +84,8 @@ export const plans = sqliteTable('plans', {
 	scaleRefAy: real('scale_ref_ay'),
 	scaleRefBx: real('scale_ref_bx'),
 	scaleRefBy: real('scale_ref_by'),
-	scaleRefMetres: real('scale_ref_metres')
+	scaleRefMetres: real('scale_ref_metres'),
+	imageOpacity: real('image_opacity').notNull().default(1)
 });
 
 export const levelTypes = sqliteTable(
@@ -104,37 +105,54 @@ export const levelTypes = sqliteTable(
 	})
 );
 
-export const points = sqliteTable('points', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => projects.id, { onDelete: 'cascade' }),
-	label: text('label').notNull(),
-	xPx: real('x_px').notNull(),
-	yPx: real('y_px').notNull(),
-	isBenchmark: integer('is_benchmark', { mode: 'boolean' }).notNull().default(false),
-	knownElevation: real('known_elevation'),
-	createdAt: integer('created_at', { mode: 'timestamp_ms' })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`)
-});
+export const points = sqliteTable(
+	'points',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id, { onDelete: 'cascade' }),
+		label: text('label').notNull(),
+		xPx: real('x_px').notNull(),
+		yPx: real('y_px').notNull(),
+		isBenchmark: integer('is_benchmark', { mode: 'boolean' }).notNull().default(false),
+		knownElevation: real('known_elevation'),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`)
+	},
+	(table) => ({
+		benchmarkElevationRequired: check(
+			'points_benchmark_known_elevation_check',
+			sql`${table.isBenchmark} = 0 OR ${table.knownElevation} IS NOT NULL`
+		)
+	})
+);
 
-export const levelSessions = sqliteTable('level_sessions', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => projects.id, { onDelete: 'cascade' }),
-	benchmarkPointId: text('benchmark_point_id')
-		.notNull()
-		.references(() => points.id, { onDelete: 'restrict' }),
-	benchmarkStaffReading: real('benchmark_staff_reading').notNull(),
-	instrumentHeight: real('instrument_height').notNull(),
-	note: text('note'),
-	startedAt: integer('started_at', { mode: 'timestamp_ms' })
-		.notNull()
-		.default(sql`(unixepoch() * 1000)`),
-	endedAt: integer('ended_at', { mode: 'timestamp_ms' })
-});
+export const levelSessions = sqliteTable(
+	'level_sessions',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id, { onDelete: 'cascade' }),
+		benchmarkPointId: text('benchmark_point_id')
+			.notNull()
+			.references(() => points.id, { onDelete: 'restrict' }),
+		benchmarkStaffReading: real('benchmark_staff_reading').notNull(),
+		instrumentHeight: real('instrument_height').notNull(),
+		note: text('note'),
+		startedAt: integer('started_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(unixepoch() * 1000)`),
+		endedAt: integer('ended_at', { mode: 'timestamp_ms' })
+	},
+	(table) => ({
+		oneActiveLevelSessionPerProject: uniqueIndex('level_sessions_one_active_per_project_idx')
+			.on(table.projectId)
+			.where(sql`${table.endedAt} IS NULL`)
+	})
+);
 
 export const readings = sqliteTable(
 	'readings',
@@ -162,6 +180,23 @@ export const readings = sqliteTable(
 	})
 );
 
+export const annotationLines = sqliteTable('annotation_lines', {
+	id: text('id').primaryKey(),
+	projectId: text('project_id')
+		.notNull()
+		.references(() => projects.id, { onDelete: 'cascade' }),
+	ax: real('ax').notNull(),
+	ay: real('ay').notNull(),
+	bx: real('bx').notNull(),
+	by: real('by').notNull(),
+	colorHex: text('color_hex').notNull().default('#0f100e'),
+	style: text('style', { enum: ['solid', 'dashed', 'dotted'] }).notNull().default('solid'),
+	strokeWidth: real('stroke_width').notNull().default(1.5),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' })
+		.notNull()
+		.default(sql`(unixepoch() * 1000)`)
+});
+
 export const schema = {
 	user,
 	session,
@@ -172,7 +207,8 @@ export const schema = {
 	levelTypes,
 	points,
 	levelSessions,
-	readings
+	readings,
+	annotationLines
 };
 
 export type DatabaseSchema = typeof schema;

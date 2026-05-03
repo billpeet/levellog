@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <filter id="rough">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3"/>
+      <feDisplacementMap in="SourceGraphic" scale="1.4"/>
+    </filter>
+  </defs>
+  <g fill="none" stroke="#0f100e" stroke-width="0.6" opacity="0.085" filter="url(#rough)">
+    <path d="M -40 420 C 120 360, 260 360, 360 320 S 600 240, 840 280"/>
+    <path d="M -40 400 C 130 340, 270 340, 360 300 S 610 220, 840 260"/>
+    <path d="M -40 380 C 140 320, 280 320, 360 280 S 620 200, 840 240"/>
+    <path d="M -40 360 C 150 300, 290 300, 360 260 S 630 180, 840 220"/>
+    <path d="M -40 340 C 160 280, 300 280, 360 240 S 640 160, 840 200"/>
+    <path d="M -40 320 C 170 260, 310 260, 360 220 S 650 140, 840 180"/>
+    <path d="M -40 300 C 180 240, 320 240, 360 200 S 660 120, 840 160"/>
+    <path d="M -40 280 C 190 220, 330 220, 360 180 S 670 100, 840 140"/>
+    <path d="M -40 260 C 200 200, 340 200, 360 160 S 680 80, 840 120"/>
+    <path d="M -40 240 C 210 180, 350 180, 360 140 S 690 60, 840 100"/>
+
+    <path d="M -40 540 C 100 520, 220 500, 320 480 S 580 420, 840 440"/>
+    <path d="M -40 560 C 100 540, 220 520, 320 500 S 580 440, 840 460"/>
+    <path d="M -40 580 C 100 560, 220 540, 320 520 S 580 460, 840 480"/>
+
+    <circle cx="540" cy="180" r="3" fill="#0f100e" opacity="0.4"/>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="9" fill="#0f100e" opacity="0.35">
+    <text x="370" y="230">·142.5</text>
+    <text x="80"  y="455">·138.0</text>
+    <text x="640" y="290">·144.0</text>
+  </g>
+</svg>

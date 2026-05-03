@@ -21,6 +21,7 @@ A web app for surveyors to record laser-level readings against a site plan, mana
 | **Level type** | A category of level recorded at a point: Current Level (CL), Finished Level (FL), Substrate Level (SL), Existing Ground (EGL), Damp-Proof Course (DPC), Finished Floor Level (FFL), or user-defined. |
 | **Measured level** | A level type whose value comes from a staff reading taken via the laser (e.g. CL). |
 | **Design level** | A level type whose value is a target elevation entered directly from drawings (e.g. FL, FFL). |
+| **Display mode** | Toggle for canvas values. **Absolute** shows true RLs (the source of truth). **Relative** shows the equivalent staff reading against the active session (`HI − elevation`) — i.e. what the rod should read. Relative is only available while a session is active. |
 
 ## 3. User stories (MVP)
 
@@ -36,12 +37,13 @@ A web app for surveyors to record laser-level readings against a site plan, mana
 10. I can toggle a **heatmap overlay** showing current / finished / delta interpolated between known points.
 11. I close a session when I move the laser. Starting a new session does not modify previously-entered readings.
 12. I can edit/delete points, readings, and sessions from a side panel.
+13. While a session is running, I can toggle the canvas between **Absolute** (true RLs) and **Relative** (staff-reading equivalents against the active session's HI). The toggle affects every value rendered on the canvas — point labels, hover/measure HUD, two-point delta, heatmap legend ticks, contour line labels — so I can sanity-check rod readings without arithmetic. Outside an active session the toggle is disabled and values are always Absolute.
 
 ## 4. Out of scope (v1)
 
 - Multi-user / sharing / read-only links.
-- Offline / PWA / sync.
-- True contour lines (Delaunay triangulation + isolines) — heatmap covers MVP need; revisit in v2.
+- ~~Offline / PWA / sync.~~ Phase 6 lands installable PWA + app-shell offline cache + offline fallback page; offline data sync (queued mutations, local SQLite mirror) remains out of scope.
+- ~~True contour lines (Delaunay triangulation + isolines) — heatmap covers MVP need; revisit in v2.~~ Pulled forward in Phase 4.5; we extract isolines via marching squares from the existing IDW grid (no Delaunay needed).
 - Volume estimation (cut/fill totals across the site).
 - CSV / PDF / print export.
 - Email + password / magic-link auth (Google only for v1).
@@ -154,6 +156,15 @@ Invariants:
 
 Each point renders the value of the project's **primary level type** beside the marker. Points without a reading for the primary type render the label only (no number). Tap → full reading list.
 
+### 7.2 Display-mode toggle
+
+- A two-state segmented control (**Abs / Rel**) sits in the canvas chrome bar next to the active-session pill.
+- **Absolute** (default): every on-canvas number is the true RL in metres. This is the only mode available when no session is active; the control is rendered disabled with a tooltip explaining why.
+- **Relative**: every on-canvas number is recomputed as `HI − elevation` and rendered with a leading marker (e.g. `↓1.234` or a small "rod" badge) so it can never be confused with an RL. Negative values (point above HI) render with `↑` and are coloured to signal "above instrument". Design-level points (FL/FFL/etc.) still display their target as a relative offset against the active HI so the surveyor sees the staff reading they should be aiming for.
+- The toggle is **view-only**. Stored elevations and stored staff readings are unchanged; reading entry forms continue to accept staff readings (measured) or absolute elevations (design) regardless of display mode.
+- When the active session ends, the canvas snaps back to Absolute and the toggle re-disables.
+- Persistence: display-mode preference is stored per-project in `localStorage` so it survives reload during a long session, but resets to Absolute whenever no session is active.
+
 ## 8. Project structure
 
 ```
@@ -192,37 +203,52 @@ drizzle.config.ts
 ## 9. Build phases
 
 **Phase 1 — Foundations** (no surveying logic yet)
-- SvelteKit + Tailwind + shadcn-svelte set up.
-- BetterAuth + Google OAuth working locally.
-- Drizzle + SQLite, initial migration with `users` / `projects` / `plans` / `level_types` seed.
-- Dockerfile + docker-compose.yml that boots the app with a mounted SQLite volume.
-- Projects dashboard + create-project flow (no plan upload yet).
+- [x] SvelteKit + Tailwind + shadcn-svelte set up.
+- [x] BetterAuth + Google OAuth wired (working pending provider credentials).
+- [x] Drizzle + SQLite, initial migration with `users` / `projects` / `plans` / `level_types` seed.
+- [x] Dockerfile + docker-compose.yml that boots the app with a mounted SQLite volume.
+- [x] Projects dashboard + create-project flow (no plan upload yet).
+- [x] Auth-guarded `(app)` routes; signed-in users skip the login screen.
 
 **Phase 2 — Plan & points**
-- Plan upload (PNG/JPG, paste, PDF page select).
-- Plan canvas with pan/zoom on desktop and touch.
-- Add/edit/delete points (non-benchmark, no readings yet).
-- Set-scale flow (reference line + distance).
+- [x] Plan upload (PNG/JPG drag-drop + clipboard paste + PDF page picker via client-side `pdfjs-dist` rasterisation; Sharp ingest pipeline; per-project upload dir; auth-guarded `/api/uploads/plans/[planId]` serving).
+- [x] Plan canvas with pan/zoom on desktop and touch (wheel + pinch + drag, fit-to-viewport, cursor-anchored zoom; SVG overlay with inverse-scaled stroke widths).
+- [x] Add/edit/delete points (non-benchmark + benchmark, no readings yet) — click-to-place with auto-suggested labels, rename + delete from the right panel.
+- [x] Set-scale flow (reference line + distance) — two-click capture with inline HUD; persists `scalePxPerMetre` + ref-line endpoints so scale stays editable.
 
 **Phase 3 — Sessions & readings**
-- Benchmark points with known elevation.
-- Start/end session, instrument height calculation.
-- Reading entry (measured via staff reading; design via direct elevation).
-- Point detail sheet with reading list.
-- Inline primary-level rendering on canvas.
+- [x] Benchmark points with known elevation (placement, label, RL editable from detail sheet; deletion blocked while sessions reference them).
+- [x] Start/end session — modal picks a benchmark + staff reading, derives instrument height, persists; topbar pill shows live HI · benchmark with End. One-active-per-project enforced at the index level.
+- [x] Reading entry — measured types require an active session and a non-negative staff reading (RL preview shown live); design types take a direct elevation. `(point, levelType)` upserts on conflict.
+- [x] Point detail sheet — slide-in sheet listing readings grouped by level type, with add / edit / delete and a reading-draft form that branches on `kind`.
+- [x] Inline primary-level rendering on canvas (falls back to benchmark RL when no measured reading); active session benchmark gets a pulsing dashed halo.
 
 **Phase 4 — Stats**
-- Two-point grade tool.
-- Heatmap overlay (current / finished / delta) via IDW.
-- View-mode toggle in toolbar.
+- [x] Two-point grade tool — left-rail tool (shortcut M) snaps two clicks to existing points; HUD shows distance, both elevations, Δheight (B−A), grade as `%` and `1:n` ratio. Blocks gracefully when plan scale isn't set or a point lacks an elevation; benchmarks fall back to their known RL.
+- [x] Heatmap overlay (current / finished / delta) via IDW — `domain/idw.ts` rasterises samples into a value grid, `domain/heatmap.ts` paints it through a sequential ramp (signal-deep → warning → accent-deep) for current/finished and a diverging signal↔accent ramp for delta. Output is a PNG data URL embedded in the SVG overlay with `mix-blend-mode: multiply` so the plan reads through.
+- [x] View-mode toggle in toolbar — segmented control in the canvas chrome bar (`Points / Current / Finished / Delta`); each option auto-disables when its source samples are empty. Includes a bottom-left legend that shows the active level types and the value range driving the ramp.
+
+**Phase 4.5 — Contour view**
+- [x] Sample-cloud convex hull masking — `domain/hull.ts` (Andrew's monotone chain, median-nearest-neighbour padding, point-in-polygon, `buildSampleHull` rejecting <3-point and colinear clouds). Shared by heatmap, contours, and arrows so all three layers stop bleeding past the measured area.
+- [x] `rasterizeIdw` accepts an optional hull and writes `NaN` for cells whose centre falls outside it; `buildHeatmapImage` skips `NaN` cells (alpha 0). Fixes the existing heatmap-bleeds-across-empty-plan behaviour as a free side-effect.
+- [x] Marching squares isoline extractor — `domain/contours.ts` with `niceInterval` (1/2/5×10ⁿ snapping, ~10-line target), `contourLevels`, `marchingSquares` (centre-of-cell saddle disambiguation, NaN-corner cells skipped), and `groupByLevel`. Major lines every 5th contour with elevation chips, minor lines thinner.
+- [x] Gradient + arrow grid — `domain/gradient.ts` (central-difference ∇z on the IDW grid, slope in m/m via `scalePxPerMetre`) and `domain/arrows.ts` (`sampleArrows` sub-grid walker that drops slopes below 0.001 m/m, `slopeColour` reusing the heatmap palette, `arrowLengthPx` for length scaling). Composed by `domain/contour-view.ts`. Skipped entirely when plan scale isn't set.
+- [x] Canvas rendering — contour minor/major paths, elevation labels in vellum chips, and fall-arrow group (line body + filled triangular head) inlined into the `PlanCanvas` overlay snippet in `+page.svelte`. (Decided not to extract dedicated `ContoursLayer.svelte` / `FallArrowsLayer.svelte` components — the markup is small enough that inline mirrors the existing heatmap pattern.)
+- [x] Toolbar split into **Source** (Current / Finished / Delta) × **View** (Points / Heatmap / Contours) segmented controls. Source disables per-option when its sample set is empty; View's Heatmap and Contours options disable when the active source has too few samples (heatmap ≥1, contours ≥3). Source controls dim while View=Points to signal they're inert. Contour mode with `viewSource === 'delta'` labels arrows as "→ cut direction" rather than direction-of-fall.
+- [x] Legend variant for contour mode — interval ("Contours every X m"), slope ramp from `flat` to peak `%`, "steepest ≈ 1:n" readout, and a "→ direction of fall" / "→ cut direction" caption that switches with the active source.
 
 **Phase 5 — Polish**
-- Mobile layout pass (bottom sheet, large touch targets).
-- Project settings (custom level types, primary type, rename, delete).
-- Error states, empty states, loading skeletons.
+- [x] Mobile layout pass — chrome bar collapses metadata below `md`, the left tool rail mirrors into a horizontal bottom strip below `lg` (44px tap targets), and the right panel collapses into a bottom sheet below `xl` opened from a "Panels" trigger in the chrome bar. Selecting a point auto-dismisses the sheet so the detail drawer takes over.
+- [x] Project settings — server-backed rename, primary-level-type picker, full level-type CRUD (create / rename / recolour / delete-when-unused with reading-count guard), and hard-delete with type-the-name confirmation that cascades the project + uploads dir.
+- [x] Error states — root `+error.svelte` with brand-styled 401/403/404/5xx copy and a "back to projects" path; inline dismiss-able error banners on settings + project view; success toast on settings mutations.
+- [x] Empty states — projects dashboard hero copy branches on zero/one/many open projects; canvas shows a "drop your first benchmark" guidance card when a project has no points; right-panel tabs each carry their own empty copy that points the user to the next action; settings level-types list flags reading usage to explain why delete is disabled.
+- [x] **Absolute / Relative display toggle** — segmented `Abs / Rel` control in the canvas chrome bar (Rel disabled until a session is running). `domain/levels.ts` exports `toDisplayLevel` + `formatLevel` (sign-arrowed string) + `formatDelta`; the project view threads them through point-marker labels, the live hover HUD, the heatmap legend ticks (gradient flips so the smaller displayed number stays on the left), contour elevation chips, and the grade-tool HUD (Δ + grade % derived from the *displayed* elevations so the readout stays internally consistent). Delta source stays absolute since it's already a difference. Stored data untouched; toggle auto-snaps back to Abs whenever the active session ends; per-project preference cached in `localStorage`.
 
-## 10. Open questions to revisit before Phase 4
+## 10. Open questions
 
-- Heatmap performance on dense point sets — may need to throttle to a low-res grid and upscale.
-- PDF rendering on the server vs. extract-on-client-then-upload-PNG. Decide once we hit Phase 2.
+- ~~Heatmap performance on dense point sets~~ — Phase 4 lands with a fixed ~140-column raster (rows scale to plan aspect); revisit only if users hit dense-grid pauses on a real plan.
+- ~~Sample-cloud masking for IDW layers~~ — Phase 4.5 adds a shared convex-hull mask (with NN-spacing padding) so heatmap, contours, and arrows all stop at the measured area instead of extrapolating into empty plan.
+- ~~PDF rendering on the server vs. extract-on-client-then-upload-PNG.~~ Decided in Phase 2: client-side `pdfjs-dist` renders the chosen page to PNG before upload.
 - Soft-delete vs. hard-delete for points/sessions. Default: hard-delete with cascade; revisit if users ask for undo.
+- Heatmap "current" vs "finished" mapping — currently auto-picks the project's primary level type for current and the first `FL` / `FFL` / design type for finished. Revisit in Phase 5 when project settings let users pin both explicitly.
+- Relative-mode rendering for **delta** view — delta is already a difference, so reinterpreting it via `HI − elevation` makes no physical sense. Current plan: in Relative mode the View=Delta source forces back to Absolute (with a one-line caption explaining why) rather than introducing a third "relative-delta" semantic. Confirm with first on-site user.

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+	<rect width="32" height="32" fill="#f1ecde"/>
+	<g stroke="#1f1d18" fill="none">
+		<!-- surveyor's benchmark: inverted triangle over a horizontal datum line -->
+		<path d="M 4 9 L 16 25 L 28 9 Z" stroke-width="1.6"/>
+		<path d="M 1 9 L 31 9" stroke-width="1.2"/>
+		<!-- crosshair inside -->
+		<circle cx="16" cy="14" r="3.4" stroke-width="1.1"/>
+		<path d="M 16 11 L 16 17 M 13 14 L 19 14" stroke-width="0.9"/>
+		<!-- registration ticks -->
+		<path d="M 1 5 L 1 9 M 31 5 L 31 9" stroke-width="0.9" opacity="0.55"/>
+	</g>
+</svg>

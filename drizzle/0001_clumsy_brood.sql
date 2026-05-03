@@ -1,0 +1,1 @@
+ALTER TABLE `plans` ADD `image_opacity` real DEFAULT 1 NOT NULL;
