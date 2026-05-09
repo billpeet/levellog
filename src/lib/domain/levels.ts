@@ -36,16 +36,17 @@ export function formatLevel(
 	elevation: number,
 	mode: DisplayMode,
 	hi: number | null,
-	digits = 3
+	digits = 0
 ): string {
 	const v = toDisplayLevel(elevation, mode, hi);
+	const mm = v * 1000;
 	if (mode === 'relative' && hi != null) {
 		// Surveyor convention: positive (HI - elev > 0) means rod-down from HI,
 		// negative means the point is above the instrument.
-		const arrow = v >= 0 ? '↓' : '↑';
-		return `${arrow}${Math.abs(v).toFixed(digits)}`;
+		const arrow = mm >= 0 ? '↓' : '↑';
+		return `${arrow}${Math.abs(mm).toFixed(digits)}`;
 	}
-	return v.toFixed(digits);
+	return mm.toFixed(digits);
 }
 
 /**
@@ -54,8 +55,9 @@ export function formatLevel(
  * relative mode, so this is mode-agnostic; included here so callers have a
  * single helper to reach for.
  */
-export function formatDelta(delta: number, digits = 3): string {
-	return `${delta >= 0 ? '+' : ''}${delta.toFixed(digits)}`;
+export function formatDelta(delta: number, digits = 0): string {
+	const mm = delta * 1000;
+	return `${mm >= 0 ? '+' : ''}${mm.toFixed(digits)}`;
 }
 
 export function calculateGrade(elevationA: number, elevationB: number, distanceMetres: number) {

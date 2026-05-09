@@ -8,10 +8,15 @@ let authInstance: ReturnType<typeof createAuth> | null = null;
 
 function createAuth() {
 	const env = getServerEnv();
+	const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS
+		?.split(',')
+		.map((origin) => origin.trim())
+		.filter(Boolean);
 
 	return betterAuth({
 		appName: 'LevelLog',
 		baseURL: env.BETTER_AUTH_URL,
+		trustedOrigins,
 		secret: env.BETTER_AUTH_SECRET,
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',

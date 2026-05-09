@@ -15,8 +15,9 @@
 		"check": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json --watch",
 		"db:generate": "bun --bun drizzle-kit generate",
-		"db:migrate": "bun --bun drizzle-kit migrate",
-		"db:migrate:deploy": "bun --bun scripts/migrate.ts"
+		"db:migrate": "bun --bun scripts/migrate.ts",
+		"db:migrate:deploy": "bun --bun scripts/migrate.ts",
+		"db:migrate:kit": "bun --bun drizzle-kit migrate"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

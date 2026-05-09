@@ -201,8 +201,18 @@
 	// Convenience derivations for the formatter helpers.
 	const hi = $derived(activeSession?.instrumentHeight ?? null);
 	const isRelative = $derived(displayMode === 'relative' && hi != null);
-	function fmtLevel(elev: number, digits = 3) {
+	function mmToMetres(value: string) {
+		const trimmed = value.trim();
+		return trimmed === '' ? Number.NaN : Number(trimmed) / 1000;
+	}
+	function metresToMm(value: number) {
+		return Math.round(value * 1000).toString();
+	}
+	function fmtLevel(elev: number, digits = 0) {
 		return formatLevel(elev, displayMode, hi, digits);
+	}
+	function fmtMm(elev: number) {
+		return metresToMm(elev);
 	}
 
 	// Hover readout
@@ -246,6 +256,7 @@
 	// Reading entry state (lives in detail sheet)
 	let readingDraft = $state<{
 		levelTypeId: string;
+		mode: 'staff' | 'elevation';
 		staffReading: string;
 		elevation: string;
 		note: string;
@@ -312,7 +323,7 @@
 
 	async function confirmStartSession() {
 		if (!sessionDraft) return;
-		const staff = Number(sessionDraft.staffReading);
+		const staff = mmToMetres(sessionDraft.staffReading);
 		if (!Number.isFinite(staff) || staff < 0) {
 			err = 'Enter a non-negative staff reading.';
 			return;
@@ -606,7 +617,7 @@
 		if (!pendingPoint) return;
 		const isBench = pendingPoint.isBenchmark;
 		const elevationInput = String(pendingElevation ?? '');
-		const elev = isBench ? Number(elevationInput) : null;
+		const elev = isBench ? mmToMetres(elevationInput) : null;
 		if (isBench && (!Number.isFinite(elev) || elevationInput.trim() === '')) {
 			err = 'Benchmark requires a known elevation.';
 			return;
@@ -687,7 +698,7 @@
 	}
 
 	async function updateBenchmarkElevation(id: string, value: string) {
-		const elev = Number(value);
+		const elev = mmToMetres(value);
 		if (!Number.isFinite(elev)) {
 			err = 'Benchmark elevation must be a number.';
 			return;
@@ -700,14 +711,34 @@
 		}
 	}
 
+	function defaultReadingMode(levelTypeId: string, existing?: typeof data.readings[number]): 'staff' | 'elevation' {
+		if (existing?.staffReading != null) return 'staff';
+		if (existing?.elevation != null) return 'elevation';
+		return levelTypeById(levelTypeId)?.kind === 'measured' ? 'staff' : 'elevation';
+	}
+
 	function startReading(levelTypeId: string, existing?: typeof data.readings[number]) {
 		readingDraft = {
 			levelTypeId,
-			staffReading: existing?.staffReading != null ? String(existing.staffReading) : '',
-			elevation: existing?.staffReading == null && existing?.elevation != null ? String(existing.elevation) : '',
+			mode: defaultReadingMode(levelTypeId, existing),
+			staffReading: existing?.staffReading != null ? metresToMm(existing.staffReading) : '',
+			elevation: existing?.elevation != null ? metresToMm(existing.elevation) : '',
 			note: existing?.note ?? '',
 			editingId: existing?.id ?? null
 		};
+	}
+
+	function setReadingMode(mode: 'staff' | 'elevation') {
+		if (!readingDraft || readingDraft.mode === mode) return;
+		if (mode === 'staff' && !readingDraft.staffReading && activeSession) {
+			const elev = mmToMetres(readingDraft.elevation);
+			if (Number.isFinite(elev)) readingDraft.staffReading = metresToMm(activeSession.instrumentHeight - elev);
+		}
+		if (mode === 'elevation' && !readingDraft.elevation && activeSession) {
+			const staff = mmToMetres(readingDraft.staffReading);
+			if (Number.isFinite(staff)) readingDraft.elevation = metresToMm(calculateReducedLevel(activeSession.instrumentHeight, staff));
+		}
+		readingDraft.mode = mode;
 	}
 
 	function cancelReading() {
@@ -722,12 +753,12 @@
 		busy = true;
 		err = null;
 		try {
-			if (lt.kind === 'measured') {
+			if (readingDraft.mode === 'staff') {
 				if (!activeSession) {
-					err = 'Start a session before recording measured readings.';
+					err = 'Start a session before recording staff readings.';
 					return;
 				}
-				const staff = Number(readingDraft.staffReading);
+				const staff = mmToMetres(readingDraft.staffReading);
 				if (!Number.isFinite(staff) || staff < 0) {
 					err = 'Staff reading must be a non-negative number.';
 					return;
@@ -740,7 +771,7 @@
 					note: readingDraft.note.trim() ? readingDraft.note.trim() : null
 				});
 			} else {
-				const elev = Number(readingDraft.elevation);
+				const elev = mmToMetres(readingDraft.elevation);
 				if (!Number.isFinite(elev)) {
 					err = 'Enter the design elevation.';
 					return;
@@ -881,18 +912,23 @@
 		const draft = sessionDraft;
 		if (!draft) return null;
 		const bench = data.points.find((p) => p.id === draft.benchmarkPointId);
-		const staff = Number(draft.staffReading);
-		if (!bench?.knownElevation || !Number.isFinite(staff)) return null;
+		const staff = mmToMetres(draft.staffReading);
+		if (bench?.knownElevation == null || !Number.isFinite(staff)) return null;
 		return calculateInstrumentHeight(bench.knownElevation, staff);
 	});
 
 	const previewRl = $derived.by(() => {
-		if (!readingDraft || !activeSession) return null;
-		const lt = levelTypeById(readingDraft.levelTypeId);
-		if (lt?.kind !== 'measured') return null;
-		const staff = Number(readingDraft.staffReading);
+		if (!readingDraft || !activeSession || readingDraft.mode !== 'staff') return null;
+		const staff = mmToMetres(readingDraft.staffReading);
 		if (!Number.isFinite(staff)) return null;
 		return calculateReducedLevel(activeSession.instrumentHeight, staff);
+	});
+
+	const previewStaff = $derived.by(() => {
+		if (!readingDraft || !activeSession || readingDraft.mode !== 'elevation') return null;
+		const elev = mmToMetres(readingDraft.elevation);
+		if (!Number.isFinite(elev)) return null;
+		return activeSession.instrumentHeight - elev;
 	});
 
 	const benchmarks = $derived(data.points.filter((p) => p.isBenchmark));
@@ -1020,6 +1056,26 @@
 				? finishedLevelType
 				: null
 	);
+
+	function pointDisplayValue(point: typeof data.points[number]): number | null {
+		if (viewSource === 'delta') {
+			const cId = currentLevelType?.id;
+			const fId = finishedLevelType?.id;
+			if (!cId || !fId) return null;
+			const c = readingFor(point.id, cId);
+			const f = readingFor(point.id, fId);
+			const cVal = c?.elevation ?? (point.isBenchmark && cId === primaryLevelTypeId ? point.knownElevation : null);
+			return cVal != null && f ? cVal - f.elevation : null;
+		}
+
+		const levelTypeId = activeSourceType?.id ?? null;
+		const reading = readingFor(point.id, levelTypeId);
+		if (reading) return reading.elevation;
+		if (viewSource === 'current' && point.isBenchmark && point.knownElevation != null && levelTypeId === primaryLevelTypeId) {
+			return point.knownElevation;
+		}
+		return null;
+	}
 
 	// ── Contour-view derivations ─────────────────────────────────────────────────
 	const contourView = $derived.by<ContourView | null>(() => {
@@ -1287,7 +1343,7 @@
 											fill="#0f100e"
 										>{viewSource === 'delta'
 											? seg.level.toFixed(interval < 0.1 ? 2 : interval < 1 ? 2 : 1)
-											: fmtLevel(seg.level, interval < 0.1 ? 2 : interval < 1 ? 2 : 1)}</text>
+											: fmtLevel(seg.level)}</text>
 									</g>
 								{/if}
 							{/each}
@@ -1488,7 +1544,7 @@
 				<!-- Points -->
 				{#each data.points as p (p.id)}
 					{@const isSel = selectedPointId === p.id}
-					{@const pr = primaryReading(p.id)}
+					{@const displayValue = pointDisplayValue(p)}
 					<g transform="translate({p.xPx} {p.yPx})">
 						{#if p.isBenchmark}
 							<path d={`M ${-r} ${-r * 0.9} L 0 ${r * 0.7} L ${r} ${-r * 0.9} Z`} fill="#0f100e" />
@@ -1506,22 +1562,14 @@
 							font-size={9 / scale}
 							fill="#6e6a5c"
 						>{p.label}</text>
-						{#if pr}
+						{#if displayValue != null}
 							<text
 								x={r * 1.4}
 								y={r * 1.0}
 								font-family="JetBrains Mono, monospace"
 								font-size={11 / scale}
-								fill="#0f100e"
-							>{fmtLevel(pr.elevation)}</text>
-						{:else if p.isBenchmark && p.knownElevation != null}
-							<text
-								x={r * 1.4}
-								y={r * 1.0}
-								font-family="JetBrains Mono, monospace"
-								font-size={11 / scale}
-								fill="#0f100e"
-							>{fmtLevel(p.knownElevation)}</text>
+								fill={viewSource === 'delta' ? (displayValue > 0 ? '#b6361a' : displayValue < 0 ? '#1f5b41' : '#0f100e') : '#0f100e'}
+							>{viewSource === 'delta' ? formatDelta(displayValue) : fmtLevel(displayValue)}</text>
 						{/if}
 					</g>
 				{/each}
@@ -1633,7 +1681,7 @@
 					<span class="font-mono text-[10px] tabular text-ink w-14">
 						{#if isDelta}{formatDelta(tickRight)}{:else}{fmtLevel(tickRight)}{/if}
 					</span>
-					<span class="font-mono text-[10px] text-graphite">m</span>
+					<span class="font-mono text-[10px] text-graphite">mm</span>
 				</div>
 				{#if isDelta}
 					<p class="mt-1 font-mono text-[10px] text-graphite">
@@ -1659,7 +1707,7 @@
 					{/if}
 				</div>
 				<p class="mt-1.5 font-mono text-[10px] text-ink">
-					Contours every <span class="tabular">{cv.interval.toFixed(cv.interval < 0.1 ? 3 : cv.interval < 1 ? 2 : 1)}</span> m
+					Contours every <span class="tabular">{fmtMm(cv.interval)}</span> mm
 				</p>
 				{#if planScale && cv.slopeMax > 0}
 					<div class="mt-2 flex items-center gap-2">
@@ -1710,7 +1758,7 @@
 				{:else if !gradeB}
 					<p class="mt-1 font-mono text-[12px] text-ink">
 						Tap the second point. Selected <span class="font-bold">A</span>: {gradePointA?.label}
-						{#if gradeReadout?.elevA != null}<span class="text-graphite">· <span class="tabular">{fmtLevel(gradeReadout.elevA)}</span> m</span>{:else}<span class="text-warning">· no elevation</span>{/if}
+						{#if gradeReadout?.elevA != null}<span class="text-graphite">· <span class="tabular">{fmtLevel(gradeReadout.elevA)}</span> mm</span>{:else}<span class="text-warning">· no elevation</span>{/if}
 					</p>
 				{:else if gradeReadout}
 					<!-- In Relative mode the rendered elevations are HI − elev, so
@@ -1728,13 +1776,13 @@
 						<div>
 							<p class="eyebrow !text-[9px]">A · {gradeReadout.a.label}</p>
 							<p class="font-mono text-[13px] tabular text-ink mt-0.5">
-								{#if gradeReadout.elevA != null}{fmtLevel(gradeReadout.elevA)} <span class="text-[10px] text-graphite">m</span>{:else}<span class="text-warning">—</span>{/if}
+								{#if gradeReadout.elevA != null}{fmtLevel(gradeReadout.elevA)} <span class="text-[10px] text-graphite">mm</span>{:else}<span class="text-warning">—</span>{/if}
 							</p>
 						</div>
 						<div>
 							<p class="eyebrow !text-[9px]">B · {gradeReadout.b.label}</p>
 							<p class="font-mono text-[13px] tabular text-ink mt-0.5">
-								{#if gradeReadout.elevB != null}{fmtLevel(gradeReadout.elevB)} <span class="text-[10px] text-graphite">m</span>{:else}<span class="text-warning">—</span>{/if}
+								{#if gradeReadout.elevB != null}{fmtLevel(gradeReadout.elevB)} <span class="text-[10px] text-graphite">mm</span>{:else}<span class="text-warning">—</span>{/if}
 							</p>
 						</div>
 						<div>
@@ -1747,7 +1795,7 @@
 							<p class="eyebrow !text-[9px]">Δ height (B−A)</p>
 							<p class="font-mono text-[13px] tabular text-ink mt-0.5">
 								{#if deltaDisp != null}
-									{formatDelta(deltaDisp)} <span class="text-[10px] text-graphite">m</span>
+									{formatDelta(deltaDisp)} <span class="text-[10px] text-graphite">mm</span>
 								{:else}<span class="text-warning">—</span>{/if}
 							</p>
 						</div>
@@ -1965,13 +2013,13 @@
 
 					{#if pendingPoint.isBenchmark}
 						<label class="mt-4 block">
-							<span class="eyebrow">Known elevation (m)</span>
+							<span class="eyebrow">Known elevation (mm)</span>
 							<input
 								type="number"
 								inputmode="decimal"
-								step="0.001"
+								step="1"
 								bind:value={pendingElevation}
-								placeholder="e.g. 12.000"
+								placeholder="e.g. 12000"
 								class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-sm text-ink focus:border-accent focus:outline-none"
 							/>
 						</label>
@@ -2011,20 +2059,20 @@
 							class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-sm text-ink focus:border-accent focus:outline-none"
 						>
 							{#each benchmarks as bm (bm.id)}
-								<option value={bm.id}>{bm.label} · {bm.knownElevation?.toFixed(3)} m</option>
+								<option value={bm.id}>{bm.label} · {bm.knownElevation != null ? fmtMm(bm.knownElevation) : '—'} mm</option>
 							{/each}
 						</select>
 					</label>
 
 					<label class="mt-4 block">
-						<span class="eyebrow">Staff reading at benchmark (m)</span>
+						<span class="eyebrow">Staff reading at benchmark (mm)</span>
 						<input
 							type="number"
 							inputmode="decimal"
-							step="0.001"
+							step="1"
 							min="0"
 							bind:value={sessionDraft.staffReading}
-							placeholder="e.g. 1.420"
+							placeholder="e.g. 1420"
 							class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-sm text-ink focus:border-accent focus:outline-none"
 						/>
 					</label>
@@ -2044,7 +2092,7 @@
 						<div class="flex items-baseline justify-between">
 							<span class="eyebrow">Instrument height</span>
 							<span class="font-mono text-lg tabular text-ink">
-								{#if previewHi != null}{previewHi.toFixed(3)}<span class="text-[11px] text-graphite ml-1">m</span>{:else}<span class="text-graphite italic">—</span>{/if}
+								{#if previewHi != null}{fmtMm(previewHi)}<span class="text-[11px] text-graphite ml-1">mm</span>{:else}<span class="text-graphite italic">—</span>{/if}
 							</span>
 						</div>
 					</div>
@@ -2330,7 +2378,7 @@
 			</button>
 		</div>
 
-		<div class="flex-1 overflow-y-auto">
+		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#if data.points.length === 0}
 				<p class="px-4 py-6 font-mono text-[11px] text-graphite">
 					No points yet. Arm <span class="text-ink">Add point</span> (P) or <span class="text-ink">Add benchmark</span> (B) and click on the canvas.
@@ -2356,13 +2404,13 @@
 								<div class="flex flex-1 flex-col leading-tight min-w-0">
 									<span class="font-mono text-xs text-ink truncate">{p.label}</span>
 									<span class="eyebrow !text-[10px]">
-										{#if p.isBenchmark}Benchmark · {p.knownElevation?.toFixed(3)} m{:else}{readingsCount} {readingsCount === 1 ? 'reading' : 'readings'}{/if}
+										{#if p.isBenchmark}Benchmark · {p.knownElevation != null ? fmtMm(p.knownElevation) : '—'} mm{:else}{readingsCount} {readingsCount === 1 ? 'reading' : 'readings'}{/if}
 									</span>
 								</div>
 								<div class="text-right shrink-0">
 									{#if pr}
-										<span class="font-mono text-sm tabular text-ink">{pr.elevation.toFixed(3)}</span>
-										<span class="font-mono text-[10px] text-graphite ml-0.5">m</span>
+										<span class="font-mono text-sm tabular text-ink">{fmtMm(pr.elevation)}</span>
+										<span class="font-mono text-[10px] text-graphite ml-0.5">mm</span>
 									{:else if !p.isBenchmark}
 										<span class="font-mono text-[11px] text-graphite italic">no reading</span>
 									{/if}
@@ -2406,7 +2454,7 @@
 			{/if}
 		</div>
 
-		<div class="flex-1 overflow-y-auto">
+		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#if data.sessions.length === 0}
 				<p class="px-4 py-6 font-mono text-[11px] text-graphite">
 					No sessions yet. {#if benchmarks.length === 0}Drop a <span class="text-ink">benchmark</span> first, then start a session.{:else}<button class="press underline hover:text-ink" onclick={openSessionModal}>Start one</button> when the laser is set up.{/if}
@@ -2431,7 +2479,7 @@
 							<div class="mt-2 flex items-baseline justify-between">
 								<span class="font-mono text-[11px] text-graphite">HI from {pointLabel(s.benchmarkPointId)}</span>
 								<span class="font-display text-xl tabular text-ink">
-									{s.instrumentHeight.toFixed(3)}<span class="font-mono text-[11px] text-graphite ml-1">m</span>
+									{fmtMm(s.instrumentHeight)}<span class="font-mono text-[11px] text-graphite ml-1">mm</span>
 								</span>
 							</div>
 							{#if s.note}
@@ -2469,7 +2517,7 @@
 			>Manage</a>
 		</div>
 
-		<div class="flex-1 overflow-y-auto">
+		<div class="min-h-0 flex-1 overflow-y-auto">
 			<ul class="divide-y divide-rule/50">
 				{#each data.levelTypes as l (l.id)}
 					<li class="flex items-center gap-3 px-4 py-3">
@@ -2489,7 +2537,7 @@
 {/snippet}
 
 <!-- Desktop right panel — locked open from xl up. -->
-<aside class="hidden xl:flex w-[320px] shrink-0 flex-col border-l border-rule bg-vellum/70">
+<aside class="hidden max-h-[calc(100dvh-8.25rem)] min-h-0 w-[320px] shrink-0 flex-col overflow-hidden border-l border-rule bg-vellum/70 xl:flex">
 	{@render panelTabs()}
 	{@render panelBody()}
 </aside>
@@ -2503,7 +2551,7 @@
 		class="fixed inset-0 z-40 bg-ink/30 backdrop-blur-[1px] xl:hidden"
 	></button>
 	<div
-		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-2xl border border-ink/15 bg-vellum shadow-[0_-12px_40px_-20px_rgba(15,16,14,0.35)] xl:hidden"
+		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] min-h-0 flex-col rounded-t-2xl border border-ink/15 bg-vellum shadow-[0_-12px_40px_-20px_rgba(15,16,14,0.35)] xl:hidden"
 	>
 		<div class="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
 			<span class="mx-auto block h-1 w-10 rounded-full bg-rule" aria-hidden="true"></span>
@@ -2560,21 +2608,21 @@
 			{#if selectedPoint.isBenchmark}
 				<section class="mb-6 rounded-md border border-rule/70 bg-vellum/70 px-4 py-3">
 					<div class="flex items-baseline justify-between">
-						<span class="eyebrow">Known elevation</span>
+						<span class="eyebrow">Known elevation (mm)</span>
 						<input
 							type="number"
 							inputmode="decimal"
-							step="0.001"
-							value={selectedPoint.knownElevation ?? ''}
+							step="1"
+							value={selectedPoint.knownElevation != null ? fmtMm(selectedPoint.knownElevation) : ''}
 							onblur={(e) => {
 								const v = (e.currentTarget as HTMLInputElement).value;
-								if (v.trim() !== '' && Number(v) !== selectedPoint.knownElevation) {
+								if (v.trim() !== '' && mmToMetres(v) !== selectedPoint.knownElevation) {
 									updateBenchmarkElevation(selectedPoint.id, v);
 								}
 							}}
 							class="w-32 border-b-2 border-ink/30 bg-transparent pb-1 text-right font-mono text-lg tabular text-ink focus:border-accent focus:outline-none"
 						/>
-						<span class="font-mono text-[11px] text-graphite">m</span>
+						<span class="font-mono text-[11px] text-graphite">mm</span>
 					</div>
 					<p class="mt-1 font-mono text-[11px] text-graphite">
 						True RL of this benchmark — used as the datum when starting a session here.
@@ -2605,13 +2653,13 @@
 										{/if}
 									</span>
 									<span class="font-mono text-base tabular text-ink shrink-0">
-										{r.elevation.toFixed(3)}<span class="text-[11px] text-graphite ml-0.5">m</span>
+										{fmtMm(r.elevation)}<span class="text-[11px] text-graphite ml-0.5">mm</span>
 									</span>
 								</div>
 								<div class="mt-1 flex items-center justify-between font-mono text-[11px] text-graphite">
 									<span>
 										{#if lt.kind === 'measured' && r.staffReading != null}
-											staff <span class="tabular text-ink">{r.staffReading.toFixed(3)}</span> m
+											staff <span class="tabular text-ink">{fmtMm(r.staffReading)}</span> mm
 										{:else}
 											design level
 										{/if}
@@ -2675,46 +2723,38 @@
 						>Cancel</button>
 					</div>
 
-					{#if draftLt.kind === 'measured'}
+					<div class="mt-3 inline-flex rounded-full border border-rule bg-paper p-0.5 font-mono text-[10px] uppercase tracking-wider">
+						<button type="button" onclick={() => setReadingMode('staff')} disabled={!activeSession} class={`press rounded-full px-3 py-1 ${readingDraft.mode === 'staff' ? 'bg-ink text-paper' : 'text-graphite hover:text-ink disabled:opacity-40'}`}>Staff</button>
+						<button type="button" onclick={() => setReadingMode('elevation')} class={`press rounded-full px-3 py-1 ${readingDraft.mode === 'elevation' ? 'bg-ink text-paper' : 'text-graphite hover:text-ink'}`}>Elevation</button>
+					</div>
+
+					{#if readingDraft.mode === 'staff'}
 						{#if !activeSession}
 							<p class="mt-3 font-mono text-[11px] text-warning">
-								Measured readings need an active session. <button class="underline" onclick={openSessionModal}>Start one</button>.
+								Staff-entry readings need an active session. <button class="underline" onclick={openSessionModal}>Start one</button>.
 							</p>
 						{:else}
 							<label class="mt-3 block">
-								<span class="eyebrow">Staff reading (m)</span>
-								<input
-									type="number"
-									inputmode="decimal"
-									step="0.001"
-									min="0"
-									bind:value={readingDraft.staffReading}
-									placeholder="e.g. 1.687"
-									class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-lg text-ink focus:border-accent focus:outline-none"
-								/>
+								<span class="eyebrow">Staff reading (mm)</span>
+								<input type="number" inputmode="decimal" step="1" min="0" bind:value={readingDraft.staffReading} placeholder="e.g. 1687" class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-lg text-ink focus:border-accent focus:outline-none" />
 							</label>
 							<div class="mt-3 flex items-baseline justify-between rounded border border-rule/70 bg-paper/80 px-3 py-2">
 								<span class="eyebrow">Reduced level</span>
-								<span class="font-mono text-base tabular text-ink">
-									{#if previewRl != null}{previewRl.toFixed(3)}<span class="text-[11px] text-graphite ml-1">m</span>{:else}<span class="text-graphite italic">—</span>{/if}
-								</span>
+								<span class="font-mono text-base tabular text-ink">{#if previewRl != null}{fmtMm(previewRl)}<span class="text-[11px] text-graphite ml-1">mm</span>{:else}<span class="text-graphite italic">—</span>{/if}</span>
 							</div>
-							<p class="mt-1 font-mono text-[10px] text-graphite">
-								HI {activeSession.instrumentHeight.toFixed(3)} m − staff = RL
-							</p>
+							<p class="mt-1 font-mono text-[10px] text-graphite">HI {fmtMm(activeSession.instrumentHeight)} mm − staff = RL</p>
 						{/if}
 					{:else}
 						<label class="mt-3 block">
-							<span class="eyebrow">Design elevation (m)</span>
-							<input
-								type="number"
-								inputmode="decimal"
-								step="0.001"
-								bind:value={readingDraft.elevation}
-								placeholder="e.g. 12.350"
-								class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-lg text-ink focus:border-accent focus:outline-none"
-							/>
+							<span class="eyebrow">Design elevation / RL (mm)</span>
+							<input type="number" inputmode="decimal" step="1" bind:value={readingDraft.elevation} placeholder="e.g. 12350" class="mt-1 w-full border-b-2 border-ink/30 bg-transparent pb-1 font-mono text-lg text-ink focus:border-accent focus:outline-none" />
 						</label>
+						{#if activeSession}
+							<div class="mt-3 flex items-baseline justify-between rounded border border-rule/70 bg-paper/80 px-3 py-2">
+								<span class="eyebrow">Equivalent staff</span>
+								<span class="font-mono text-base tabular text-ink">{#if previewStaff != null}{fmtMm(previewStaff)}<span class="text-[11px] text-graphite ml-1">mm</span>{:else}<span class="text-graphite italic">—</span>{/if}</span>
+							</div>
+						{/if}
 					{/if}
 
 					<label class="mt-3 block">
@@ -2731,7 +2771,7 @@
 						<button
 							type="button"
 							onclick={confirmReading}
-							disabled={busy || (draftLt.kind === 'measured' && !activeSession)}
+							disabled={busy || (readingDraft.mode === 'staff' && !activeSession)}
 							class="press rounded-full bg-ink px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-paper disabled:opacity-40"
 						>Save reading</button>
 					</div>

@@ -88,7 +88,7 @@
 		onstartSession={inProject ? onstartSession : undefined}
 		onendSession={inProject ? onendSession : undefined}
 	/>
-	<main class="flex flex-1 flex-col">
+	<main class="flex min-h-0 flex-1 flex-col">
 		{@render children()}
 	</main>
 	<footer class="hidden border-t border-rule/60 bg-paper/60 px-6 py-3 sm:block">

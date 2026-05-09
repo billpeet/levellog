@@ -20,6 +20,8 @@ Scaffolded foundations for the LevelLog web application.
 5. Apply migrations with `bun run db:migrate`.
 6. Start the dev server with `bun run dev`.
 
+`bun run db:migrate` uses the Bun SQLite migration script in `scripts/migrate.ts`. Drizzle Kit's built-in SQLite migrator (`bun run db:migrate:kit`) requires installing either `better-sqlite3` or `@libsql/client`, but the app itself uses Bun's native `bun:sqlite` driver.
+
 ## Notes
 
 - `DATABASE_URL` should point to a writable SQLite file.

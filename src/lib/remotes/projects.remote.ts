@@ -629,19 +629,18 @@ export const upsertReading = command(
 		let storedStaffReading: number | null = null;
 		let storedElevation: number;
 
-		if (levelType.kind === 'measured') {
-			if (staffReading == null) error(400, 'Measured readings require a staff reading');
+		if (staffReading != null) {
 			const [activeSession] = await db
 				.select()
 				.from(levelSessions)
 				.where(and(eq(levelSessions.projectId, projectId), isNull(levelSessions.endedAt)))
 				.limit(1);
-			if (!activeSession) error(400, 'Start a level session before adding measured readings');
+			if (!activeSession) error(400, 'Start a level session before adding staff readings');
 			sessionId = activeSession.id;
 			storedStaffReading = staffReading;
 			storedElevation = calculateReducedLevel(activeSession.instrumentHeight, staffReading);
 		} else {
-			if (elevation == null) error(400, 'Design readings require an elevation');
+			if (elevation == null) error(400, 'Enter an elevation or staff reading');
 			storedElevation = elevation;
 		}
 
